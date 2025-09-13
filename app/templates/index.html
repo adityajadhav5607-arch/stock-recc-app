@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Stock Recommender</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial; 
+         background: linear-gradient(135deg,#d9d7ff,#f5e8ff); }
+  .container { max-width: 1000px; margin: 40px auto; padding: 16px; }
+  .card { background:#fff; border-radius:14px; padding:18px 20px; box-shadow:0 8px 30px rgba(0,0,0,0.08); }
+  .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap:14px; }
+  label { font-size:13px; color:#555; display:block; margin:8px 0 6px; }
+  select, input[type="text"], input[type="number"] { width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:10px; }
+  button { padding:10px 14px; border:none; border-radius:10px; background:#6c63ff; color:#fff; font-weight:600; cursor:pointer; }
+  button[disabled] { background:#bbb; cursor:not-allowed; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
+  .note { color:#555; margin:12px 0; }
+  .ret.pos { color:#0a8f3c; font-weight:600; }
+  .ret.neg { color:#c62828; font-weight:600; }
+  .k { color:#777; font-size:12px; }
+  .pill { background:#f3f3ff; color:#333; padding:2px 8px; border-radius:999px; font-size:12px; }
+  .err { background:#fff3f3; border:1px solid #ffcccc; color:#a40000; padding:10px 12px; border-radius:10px; margin:10px 0; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>Aditya's Stock Recommender</h1>
+    <p class="k">Demo only. Not investment advice.</p>
+
+    <div class="card" style="margin:16px 0;">
+      <form method="post" action="/recommend">
+        <div class="row">
+          <div style="flex:1 1 220px;">
+            <label>Goal</label>
+            <select name="goal">
+              {% for g in goals %}
+                <option value="{{g}}" {% if form and form.goal==g %}selected{% endif %}>{{ g.replace('_',' ') }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label>Risk</label>
+            <select name="risk">
+              {% for r in ['low','medium','high'] %}
+              <option value="{{r}}" {% if form and form.risk==r %}selected{% endif %}>{{r}}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div style="flex:1 1 200px;">
+            <label>Include (symbols or tags, comma separated)</label>
+            <input type="text" name="include" value="{{ (form.include|join(', ')) if form and form.include else '' }}">
+          </div>
+          <div style="flex:1 1 200px;">
+            <label>Exclude (symbols or tags, comma separated)</label>
+            <input type="text" name="exclude" value="{{ (form.exclude|join(', ')) if form and form.exclude else '' }}">
+          </div>
+          <div>
+            <label>Max</label>
+            <input type="number" min="1" max="50" name="max" value="{{ form.max if form and form.max else 10 }}">
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button type="submit">Recommend</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="card" style="margin:16px 0;">
+      <form id="smart-form" method="post" action="/recommend_smart">
+        <div class="row">
+          <div style="flex:2 1 380px;">
+            <label>Smart query (free text)</label>
+            <input id="query" name="query" type="text" placeholder='e.g., "AI chips", "dividend healthcare", "car makers EV"'
+                   value="{{ form.query if form and form.query else '' }}">
+          </div>
+          <div>
+            <label>Risk</label>
+            <select name="risk">
+              {% for r in ['low','medium','high'] %}
+              <option value="{{r}}" {% if form and form.risk==r %}selected{% endif %}>{{r}}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label>Max</label>
+            <input type="number" min="1" max="50" name="max" value="{{ form.max if form and form.max else 10 }}">
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="smart-btn" type="submit">Smart Recommend</button>
+          </div>
+        </div>
+      </form>
+      {% if result and result.error %}
+        <div class="err">{{ result.error }}</div>
+      {% endif %}
+    </div>
+
+    {% if result and result.note %}
+      <div class="note"><span class="pill">Note</span> {{ result.note }}</div>
+    {% endif %}
+
+    {% if result and result.tickers %}
+    <div class="grid" style="margin-top:12px;">
+      {% for t in result.tickers %}
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div><strong>{{ t.symbol }}</strong> — {{ t.name }}</div>
+          <div class="pill">{{ t.type }}</div>
+        </div>
+        <div style="margin-top:8px;">
+          <div>Price: 
+            <span class="price">
+              {% if t.price is not none %}${{ '%.2f'|format(t.price) }}{% else %}—{% endif %}
+            </span>
+          </div>
+          <div>1y: 
+            <span class="ret {{ 'pos' if t.ret_1y_pct is not none and t.ret_1y_pct >= 0 else 'neg' }}">
+              {% if t.ret_1y_pct is not none %}{{ '%.2f'|format(t.ret_1y_pct) }}%{% else %}—{% endif %}
+            </span>
+          </div>
+          <div>Dividend: 
+            {% if t.div_yield_pct is not none %}{{ '%.2f'|format(t.div_yield_pct) }}%{% else %}—{% endif %}
+          </div>
+        </div>
+        <div class="k" style="margin-top:8px;">Why: {{ t.why }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const smartForm = document.getElementById('smart-form');
+  const queryInput = document.getElementById('query');
+  const smartBtn   = document.getElementById('smart-btn');
+
+  function updateBtn() {
+    const hasText = queryInput.value.trim().length > 0;
+    smartBtn.disabled = !hasText;
+  }
+  queryInput.addEventListener('input', updateBtn);
+  updateBtn();
+
+  smartForm.addEventListener('submit', (e) => {
+    if (queryInput.value.trim().length === 0) {
+      e.preventDefault();
+      alert('Type a query (e.g., "AI chips" or "dividend healthcare") before using Smart Recommend.');
+    }
+  });
+});
+</script>
+</body>
+</html>
